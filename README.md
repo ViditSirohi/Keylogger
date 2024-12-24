@@ -49,7 +49,7 @@ This Python-based keylogger logs keystrokes and collects system information (hos
 1. **Clone or Download** this repository:
    ```bash
    git clone https://github.com/viditsirohi/keylogger.git
-   cd your-repo
+   cd keylogger
    ```
 
 2. **Install Python 3** (if not already installed).  
@@ -90,7 +90,7 @@ This Python-based keylogger logs keystrokes and collects system information (hos
 ## Usage
 1. **Navigate to the Script’s Directory**:
    ```bash
-   cd your-repo
+   cd keylogger
    ```
 
 2. **Run the Keylogger**:
