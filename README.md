@@ -48,7 +48,7 @@ This Python-based keylogger logs keystrokes and collects system information (hos
 ## Installation
 1. **Clone or Download** this repository:
    ```bash
-   git clone https://github.com/your-username/your-repo.git
+   git clone https://github.com/viditsirohi/keylogger.git
    cd your-repo
    ```
 
@@ -77,7 +77,7 @@ This Python-based keylogger logs keystrokes and collects system information (hos
      $env:LOG_MAIL_ADDRESS="your_email@gmail.com"
      $env:LOG_MAIL_PASSWORD="your_secure_password"
      ```
-   - Alternatively, you can **hard-code** them in the script (not recommended).
+   - Alternatively, you can **hard-code** them in the script if you're sending this to someone.
 
 2. **Script Settings**:
    - `SYSINFO_FILE` (default `"sysinfo.txt"`)  
